@@ -1,5 +1,5 @@
 (async function () {
-  const manifest = await (await fetch("manifest.json")).json();
+  const manifest = await (await fetch("manifest.json", { cache: "no-cache" })).json();
 
   // Build nested tree from manifest.dirs (all folders) + manifest.files
   const root = { children: {}, files: [] };
@@ -88,7 +88,7 @@
     if (li) li.classList.add("active");
     location.hash = "#/" + path;
     article.innerHTML = "<p class='empty-hint'>加载中……</p>";
-    const res = await fetch("docs/" + path.split("/").map(encodeURIComponent).join("/"));
+    const res = await fetch("docs/" + path.split("/").map(encodeURIComponent).join("/"), { cache: "no-cache" });
     if (!res.ok) {
       article.innerHTML = "<p class='empty-hint'>文档加载失败（" + res.status + "）</p>";
       return;
