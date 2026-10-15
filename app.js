@@ -82,10 +82,21 @@
 
   treeEl.querySelectorAll(":scope > ul > .inner > li.folder").forEach((li) => li.classList.add("open"));
 
+  // Mobile drawer
+  const sidebar = document.getElementById("sidebar");
+  const backdrop = document.getElementById("backdrop");
+  function setDrawer(open) {
+    sidebar.classList.toggle("open", open);
+    backdrop.classList.toggle("show", open);
+  }
+  document.getElementById("menu-btn").onclick = () => setDrawer(true);
+  backdrop.onclick = () => setDrawer(false);
+
   const article = document.getElementById("article");
   async function loadDoc(path, li) {
     document.querySelectorAll(".tree .file.active").forEach((el) => el.classList.remove("active"));
     if (li) li.classList.add("active");
+    setDrawer(false);
     location.hash = "#/" + path;
     article.innerHTML = "<p class='empty-hint'>加载中……</p>";
     const res = await fetch("docs/" + path.split("/").map(encodeURIComponent).join("/"), { cache: "no-cache" });
