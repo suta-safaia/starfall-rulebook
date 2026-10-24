@@ -145,6 +145,114 @@
     }
   });
 
+  // Global full-text search
+  const gsearch = document.getElementById("gsearch");
+  const gresults = document.getElementById("gresults");
+  let docsCachePromise = null;
+  function loadAllDocs() {
+    if (!docsCachePromise) {
+      docsCachePromise = Promise.all(
+        manifest.files.map(async (p) => {
+          try {
+            const res = await fetch("docs/" + p.split("/").map(encodeURIComponent).join("/"));
+            if (!res.ok) return null;
+            return { path: p, name: p.slice(p.lastIndexOf("/") + 1).replace(/\.md$/i, ""), text: await res.text() };
+          } catch (e) { return null; }
+        })
+      ).then((arr) => arr.filter(Boolean));
+    }
+    return docsCachePromise;
+  }
+  function snippetInto(el, text, q) {
+    const lq = q.toLowerCase();
+    let i = 0;
+    for (;;) {
+      const j = text.toLowerCase().indexOf(lq, i);
+      if (j < 0) { el.appendChild(document.createTextNode(text.slice(i))); break; }
+      el.appendChild(document.createTextNode(text.slice(i, j)));
+      const mark = document.createElement("mark");
+      mark.textContent = text.slice(j, j + q.length);
+      el.appendChild(mark);
+      i = j + q.length;
+    }
+  }
+  let gsearchTimer = null;
+  gsearch.addEventListener("input", () => {
+    clearTimeout(gsearchTimer);
+    gsearchTimer = setTimeout(runGsearch, 250);
+  });
+  async function runGsearch() {
+    const q = gsearch.value.trim();
+    if (!q) {
+      gresults.classList.add("hidden");
+      gresults.innerHTML = "";
+      treeEl.classList.remove("hidden");
+      return;
+    }
+    treeEl.classList.add("hidden");
+    gresults.classList.remove("hidden");
+    gresults.innerHTML = "";
+    const loading = document.createElement("div");
+    loading.className = "no-result";
+    gresults.appendChild(loading);
+    const docs = await loadAllDocs();
+    if (gsearch.value.trim() !== q) return; // 输入已变化，放弃本次结果
+    loading.remove();
+    const lq = q.toLowerCase();
+    const hits = [];
+    for (const d of docs) {
+      const lt = d.text.toLowerCase();
+      let count = 0, idx = -1;
+      while ((idx = lt.indexOf(lq, idx + 1)) >= 0) count++;
+      if (count > 0 || d.name.toLowerCase().includes(lq)) hits.push({ d, count });
+    }
+    hits.sort((a, b) => b.count - a.count);
+    if (!hits.length) {
+      const hint = document.createElement("div");
+      hint.className = "no-result";
+      hint.textContent = "没有匹配的内容";
+      gresults.appendChild(hint);
+      return;
+    }
+    for (const { d, count } of hits.slice(0, 50)) {
+      const item = document.createElement("div");
+      item.className = "gresult";
+      const title = document.createElement("div");
+      title.className = "gt";
+      title.appendChild(document.createTextNode(d.name + " "));
+      const gn = document.createElement("span");
+      gn.className = "gn";
+      gn.textContent = count > 0 ? count + " 处匹配" : "标题匹配";
+      title.appendChild(gn);
+      item.appendChild(title);
+      if (count > 0) {
+        const flat = d.text.replace(/\s+/g, " ");
+        const lflat = flat.toLowerCase();
+        let idx = -1, shown = 0;
+        while (shown < 3 && (idx = lflat.indexOf(lq, idx + 1)) >= 0) {
+          const line = document.createElement("div");
+          line.className = "gs";
+          const start = Math.max(0, idx - 30);
+          snippetInto(line, (start > 0 ? "…" : "") + flat.slice(start, idx + q.length + 50) + "…", q);
+          item.appendChild(line);
+          shown++;
+        }
+      }
+      item.onclick = () => {
+        const li = treeEl.querySelector('.file[data-path="' + CSS.escape(d.path) + '"]');
+        if (li) {
+          let p = li.parentElement;
+          while (p && p !== treeEl) {
+            if (p.classList && p.classList.contains("folder")) p.classList.add("open");
+            p = p.parentElement;
+          }
+        }
+        loadDoc(d.path, li);
+      };
+      gresults.appendChild(item);
+    }
+  }
+
   // Deep link: #/path/to/doc.md
   if (location.hash.startsWith("#/")) {
     const path = decodeURIComponent(location.hash.slice(2));
